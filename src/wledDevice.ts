@@ -233,7 +233,7 @@ export class WLEDDevice {
     const message = data.toString();
 
     try {
-      this.log.info(`WebSocket RX: ${message}`);
+      this.log.debug(`WebSocket RX: ${message}`);
 
       // Parse the JSON message
       const jsonData = JSON.parse(message);
@@ -560,7 +560,7 @@ export class WLEDDevice {
     if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
       try {
         const message = JSON.stringify(payload);
-        this.log.info(`WebSocket TX: ${message}`);
+        this.log.debug(`WebSocket TX: ${message}`);
         this.webSocket.send(message);
         return; // Success - no need to continue
       } catch (error) {
