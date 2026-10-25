@@ -5,7 +5,7 @@
   "description": "Homebridge plugin for WLED LED controllers",
   "main": "dist/index.js",
   "scripts": {
-    "clean": "rm -rf dist coverage",
+    "clean": "rimraf dist coverage",
     "lint": "eslint src/**.ts",
     "test": "jest --forceExit",
     "test:watch": "jest --watch",
@@ -15,7 +15,7 @@
     "test:unit": "jest tests/wledDevice.test.ts tests/discoveryService.test.ts tests/platform.test.ts tests/settings.test.ts --forceExit",
     "prebuild": "npm run lint && npm run test:unit",
     "build": "npm run clean && tsc && npm run build:ui",
-    "build:ui": "tsc -p homebridge-ui/tsconfig.json && cp -r homebridge-ui/public dist/homebridge-ui/",
+    "build:ui": "tsc -p homebridge-ui/tsconfig.json && xcopy /E /I /Y homebridge-ui\\public dist\\homebridge-ui",
     "prepublishOnly": "npm run build",
     "watch": "npm run build -- --watch"
   },
