@@ -2,6 +2,7 @@ import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, 
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
 import { WLEDLightAccessory } from './platformAccessory';
 import { WLEDPresetsAccessory } from './presetsAccessory';
+import { WLEDSegmentAccessory } from './segmentAccessory';
 import { WLEDDevice } from './wledDevice';
 import { WLEDDiscoveryService, DiscoveredWLEDDevice } from './discoveryService';
 
@@ -86,6 +87,67 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
     return this.api.hap.uuid.generate(host + ':tv');
   }
 
+  private segmentUuid(host: string, segmentId: number): string {
+    return this.api.hap.uuid.generate(`${host}:segment:${segmentId}`);
+  }
+
+  private usePresetService(device: any): boolean {
+    return (device.deviceSettings || device).usePresetService !== false;
+  }
+
+  private useSegments(device: any): boolean {
+    return (device.deviceSettings || device).useSegments === true;
+  }
+
+  private removeAccessories(accessories: PlatformAccessory[]): void {
+    if (accessories.length === 0) return;
+    this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, accessories);
+    for (const accessory of accessories) {
+      const index = this.accessories.indexOf(accessory);
+      if (index >= 0) this.accessories.splice(index, 1);
+    }
+  }
+
+  private async syncSegments(device: any, deviceContext: any, wledDevice: WLEDDevice): Promise<void> {
+    const host = device.host;
+    const cachedSegments = this.accessories.filter(a => a.context.accessoryType === 'segment' && a.context.device?.host === host);
+    if (!this.useSegments(device)) {
+      this.removeAccessories(cachedSegments);
+      return;
+    }
+
+    try {
+      const segments = await wledDevice.getSegments();
+      const expectedUuids = new Set<string>();
+      for (const segment of segments) {
+        const uuid = this.segmentUuid(host, segment.id);
+        expectedUuids.add(uuid);
+        const name = `${deviceContext.name} ${segment.name || `Segment ${segment.id}`}`;
+        const existing = this.accessories.find(a => a.UUID === uuid);
+        if (existing) {
+          existing.context.device = deviceContext;
+          existing.context.accessoryType = 'segment';
+          existing.context.segmentId = segment.id;
+          existing.context.segmentName = name;
+          new WLEDSegmentAccessory(this, existing, wledDevice, segment.id);
+          this.api.updatePlatformAccessories([existing]);
+        } else {
+          const accessory = new this.api.platformAccessory(name, uuid, this.api.hap.Categories.LIGHTBULB);
+          accessory.context.device = deviceContext;
+          accessory.context.accessoryType = 'segment';
+          accessory.context.segmentId = segment.id;
+          accessory.context.segmentName = name;
+          new WLEDSegmentAccessory(this, accessory, wledDevice, segment.id);
+          this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+          this.accessories.push(accessory);
+        }
+      }
+      this.removeAccessories(cachedSegments.filter(a => !expectedUuids.has(a.UUID)));
+    } catch (error) {
+      this.log.error(`Failed to expose segments for ${deviceContext.name}:`, error);
+    }
+  }
+
   /**
    * Handle newly discovered WLED devices
    */
@@ -143,7 +205,10 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
 
       const lightUuid = this.lightUuid(device.host);
       const tvUuid = this.tvUuid(device.host);
-      const deviceContext = { name: displayName, host: device.host, port: device.port };
+      const deviceContext = { name: displayName, host: device.host, port: device.port, deviceSettings: {
+        usePresetService: defaultSettings.defaultUsePresetService !== false,
+        useSegments: defaultSettings.defaultUseSegments === true,
+      } };
 
       // --- Light accessory ---
       const existingLightAccessory = this.accessories.find(a => a.UUID === lightUuid);
@@ -163,7 +228,9 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
       // --- Presets/TV accessory ---
       const tvDisplayName = displayName + ' Presets';
       const existingTVAccessory = this.accessories.find(a => a.UUID === tvUuid);
-      if (existingTVAccessory) {
+      if (!this.usePresetService(deviceContext)) {
+        this.removeAccessories(existingTVAccessory ? [existingTVAccessory] : []);
+      } else if (existingTVAccessory) {
         this.log.info('Restoring existing TV accessory from cache:', existingTVAccessory.displayName);
         existingTVAccessory.context.device = deviceContext;
         new WLEDPresetsAccessory(this, existingTVAccessory, wledDevice);
@@ -175,6 +242,7 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
         new WLEDPresetsAccessory(this, tvAccessory, wledDevice);
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [tvAccessory]);
       }
+      void this.syncSegments(deviceContext, deviceContext, wledDevice);
     }
   }
 
@@ -276,7 +344,9 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
       const newEnabledPresets = device.deviceSettings?.enabledPresets || [];
       const presetsChanged = JSON.stringify([...oldEnabledPresets].sort()) !== JSON.stringify([...newEnabledPresets].sort());
 
-      if (existingTVAccessory) {
+      if (!this.usePresetService(device)) {
+        this.removeAccessories(existingTVAccessory ? [existingTVAccessory] : []);
+      } else if (existingTVAccessory) {
         if (presetsChanged) {
           this.log.info(`Enabled presets changed for ${displayName}. Re-registering TV accessory to force Home app refresh...`);
           this.log.debug(`Old presets: ${JSON.stringify(oldEnabledPresets)}`);
@@ -311,6 +381,7 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
         new WLEDPresetsAccessory(this, tvAccessory, wledDevice);
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [tvAccessory]);
       }
+      void this.syncSegments(device, deviceContext, wledDevice);
     }
 
     // Check which accessories are no longer in the config and should be removed
@@ -324,7 +395,10 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
       const isConfigured = devices.some((configuredDevice: any) => {
         const lightUuid = this.lightUuid(configuredDevice.host);
         const tvUuid = this.tvUuid(configuredDevice.host);
-        return accessory.UUID === lightUuid || accessory.UUID === tvUuid;
+        if (accessory.UUID === lightUuid) return configuredDevice.enabled !== false;
+        if (accessory.UUID === tvUuid) return configuredDevice.enabled !== false && this.usePresetService(configuredDevice);
+        return accessory.context.accessoryType === 'segment' && accessory.context.device?.host === configuredDevice.host &&
+          configuredDevice.enabled !== false && this.useSegments(configuredDevice);
       });
 
       if (!isConfigured) {

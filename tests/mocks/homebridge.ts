@@ -158,6 +158,7 @@ export class MockHAP {
     Manufacturer: { UUID: 'Manufacturer' },
     Model: { UUID: 'Model' },
     SerialNumber: { UUID: 'SerialNumber' },
+    Name: { UUID: 'Name' },
     On: { UUID: 'On' },
     Brightness: { UUID: 'Brightness' },
     Hue: { UUID: 'Hue' },

@@ -204,6 +204,20 @@ describe('WLEDPlatform', () => {
   });
 
   describe('Preset Configuration Changes', () => {
+    it('should not create preset controls when usePresetService is disabled', () => {
+      const device = createMockDeviceConfig({
+        deviceSettings: { usePresetService: false },
+      });
+      const config = createMockPlatformConfig({ devices: [device] });
+
+      platform = new WLEDPlatform(mockLogger, config, mockApi as any);
+      mockApi.emit('didFinishLaunching');
+
+      const registeredNames = mockApi.registerPlatformAccessories.mock.calls
+        .flatMap(call => call[2].map((accessory: any) => accessory.displayName));
+      expect(registeredNames).not.toContain('Test WLED Presets');
+    });
+
     it('should re-register accessory when enabled presets change', () => {
       const device = createMockDeviceConfig({
         name: 'Device',
@@ -368,6 +382,46 @@ describe('WLEDPlatform', () => {
   });
 
   describe('Device Settings', () => {
+    it('should create and remove segment accessories according to useSegments', async () => {
+      const device = createMockDeviceConfig({
+        deviceSettings: { useSegments: true },
+      });
+      const config = createMockPlatformConfig({ devices: [device] });
+      platform = new WLEDPlatform(mockLogger, config, mockApi as any);
+      const segmentDevice = {
+        getSegments: jest.fn().mockResolvedValue([
+          { id: 0, name: 'Left' },
+          { id: 1, name: 'Right' },
+        ]),
+        getSegmentState: jest.fn().mockReturnValue({
+          on: true, brightness: 50, hue: 0, saturation: 0, colorMode: 'rgb',
+          color: { r: 0, g: 0, b: 0 }, colorTemperature: 140, effect: 0, presetId: 0,
+        }),
+        getState: jest.fn().mockReturnValue({ segmentState: [] }),
+        addStateListener: jest.fn(),
+        setSegmentPower: jest.fn(),
+        setSegmentBrightness: jest.fn(),
+        setSegmentHSV: jest.fn(),
+      };
+
+      await (platform as any).syncSegments(device, device, segmentDevice);
+
+      const segmentAccessories = mockApi.registerPlatformAccessories.mock.calls
+        .flatMap(call => call[2])
+        .filter((accessory: any) => accessory.context.accessoryType === 'segment');
+      expect(mockLogger.error).not.toHaveBeenCalledWith(expect.stringContaining('Failed to expose segments'), expect.anything());
+      expect(segmentAccessories).toHaveLength(2);
+
+      await (platform as any).syncSegments(
+        { ...device, deviceSettings: { useSegments: false } },
+        device,
+        segmentDevice,
+      );
+      expect(mockApi.unregisterPlatformAccessories).toHaveBeenCalledWith(
+        expect.any(String), expect.any(String), expect.arrayContaining(segmentAccessories),
+      );
+    });
+
     it('should apply device-specific settings', () => {
       const device = createMockDeviceConfig({
         name: 'Device',
