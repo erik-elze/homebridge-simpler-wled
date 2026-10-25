@@ -55,6 +55,12 @@
             "type": "boolean",
             "default": false
           },
+          "defaultUseMasterAccessory": {
+            "title": "Expose Master Light",
+            "description": "Create the main WLED light accessory in addition to any segment accessories",
+            "type": "boolean",
+            "default": true
+          },
           "defaultUseWebSockets": {
             "title": "Use WebSockets",
             "description": "Use WebSockets for real-time updates on automatically discovered devices (requires WLED v0.13+)",
@@ -117,6 +123,12 @@
                       "description": "Create one light accessory per configured WLED segment",
                       "type": "boolean",
                       "default": false
+                    },
+                    "useMasterAccessory": {
+                      "title": "Expose Master Light",
+                      "description": "Create the main WLED light accessory in addition to any segment accessories",
+                      "type": "boolean",
+                      "default": true
                     },
                     "useWebSockets": {
                       "title": "Use WebSockets",

@@ -204,6 +204,20 @@ describe('WLEDPlatform', () => {
   });
 
   describe('Preset Configuration Changes', () => {
+    it('should not create a master light when useMasterAccessory is disabled', () => {
+      const device = createMockDeviceConfig({
+        deviceSettings: { useMasterAccessory: false },
+      });
+      const config = createMockPlatformConfig({ devices: [device] });
+
+      platform = new WLEDPlatform(mockLogger, config, mockApi as any);
+      mockApi.emit('didFinishLaunching');
+
+      const registeredNames = mockApi.registerPlatformAccessories.mock.calls
+        .flatMap(call => call[2].map((accessory: any) => accessory.displayName));
+      expect(registeredNames).not.toContain('Test WLED');
+    });
+
     it('should not create preset controls when usePresetService is disabled', () => {
       const device = createMockDeviceConfig({
         deviceSettings: { usePresetService: false },

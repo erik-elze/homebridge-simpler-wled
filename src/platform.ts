@@ -99,6 +99,10 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
     return (device.deviceSettings || device).useSegments === true;
   }
 
+  private useMasterAccessory(device: any): boolean {
+    return (device.deviceSettings || device).useMasterAccessory !== false;
+  }
+
   private removeAccessories(accessories: PlatformAccessory[]): void {
     if (accessories.length === 0) return;
     this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, accessories);
@@ -208,11 +212,14 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
       const deviceContext = { name: displayName, host: device.host, port: device.port, deviceSettings: {
         usePresetService: defaultSettings.defaultUsePresetService !== false,
         useSegments: defaultSettings.defaultUseSegments === true,
+        useMasterAccessory: defaultSettings.defaultUseMasterAccessory !== false,
       } };
 
-      // --- Light accessory ---
+      // --- Master light accessory ---
       const existingLightAccessory = this.accessories.find(a => a.UUID === lightUuid);
-      if (existingLightAccessory) {
+      if (!this.useMasterAccessory(deviceContext)) {
+        this.removeAccessories(existingLightAccessory ? [existingLightAccessory] : []);
+      } else if (existingLightAccessory) {
         this.log.info('Restoring existing light accessory from cache:', existingLightAccessory.displayName);
         existingLightAccessory.context.device = deviceContext;
         new WLEDLightAccessory(this, existingLightAccessory, wledDevice);
@@ -289,9 +296,12 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
         this.log.info(`Skipping disabled device: ${device.name}`);
 
         // If these accessories were previously registered, unregister them
-        const toRemove = this.accessories.filter(a => a.UUID === lightUuid || a.UUID === tvUuid);
+        const toRemove = this.accessories.filter(a =>
+          a.UUID === lightUuid || a.UUID === tvUuid ||
+          (a.context.accessoryType === 'segment' && a.context.device?.host === device.host),
+        );
         if (toRemove.length > 0) {
-          this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, toRemove);
+          this.removeAccessories(toRemove);
         }
 
         continue;
@@ -316,9 +326,11 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
 
       const deviceContext = { ...device, name: displayName };
 
-      // --- Light accessory ---
+      // --- Master light accessory ---
       const existingLightAccessory = this.accessories.find(a => a.UUID === lightUuid);
-      if (existingLightAccessory) {
+      if (!this.useMasterAccessory(device)) {
+        this.removeAccessories(existingLightAccessory ? [existingLightAccessory] : []);
+      } else if (existingLightAccessory) {
         this.log.info('Restoring existing light accessory from cache:', existingLightAccessory.displayName);
         if (existingLightAccessory.displayName !== displayName) {
           this.log.info(`Updating display name from "${existingLightAccessory.displayName}" to "${displayName}"`);
@@ -395,7 +407,7 @@ export class WLEDPlatform implements DynamicPlatformPlugin {
       const isConfigured = devices.some((configuredDevice: any) => {
         const lightUuid = this.lightUuid(configuredDevice.host);
         const tvUuid = this.tvUuid(configuredDevice.host);
-        if (accessory.UUID === lightUuid) return configuredDevice.enabled !== false;
+        if (accessory.UUID === lightUuid) return configuredDevice.enabled !== false && this.useMasterAccessory(configuredDevice);
         if (accessory.UUID === tvUuid) return configuredDevice.enabled !== false && this.usePresetService(configuredDevice);
         return accessory.context.accessoryType === 'segment' && accessory.context.device?.host === configuredDevice.host &&
           configuredDevice.enabled !== false && this.useSegments(configuredDevice);

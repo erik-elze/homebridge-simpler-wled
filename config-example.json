@@ -15,6 +15,7 @@
       },
       "defaultSettingsSection": {
         "defaultUseSegments": false,
+        "defaultUseMasterAccessory": true,
         "defaultUsePresetService": true,
         "defaultUseWebSockets": true,
         "defaultPollInterval": 10
@@ -27,6 +28,7 @@
             "port": 80,
             "deviceSettings": {
               "useSegments": true,
+              "useMasterAccessory": true,
               "usePresetService": true,
               "useWebSockets": true,
               "pollInterval": 5
