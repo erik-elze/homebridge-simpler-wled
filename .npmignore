@@ -21,6 +21,10 @@ jest.config.js
 *.log
 npm-debug.log*
 
+# Locally generated packages and npm caches
+*.tgz
+.npm-pack-cache/
+
 # Git
 .git/
 .gitignore
